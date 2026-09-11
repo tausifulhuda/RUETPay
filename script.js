@@ -388,6 +388,11 @@ function handleSendMoney(event) {
     return;
   }
 
+  if (amount > 25_000){
+    message.textContent = "Can't send more than ৳25,000 at a time.";
+    return;
+  }
+
   // Atomic-looking frontend simulation: update both account balances.
   state.user.balance = Number(state.user.balance) - amount;
   recipient.balance = Number(recipient.balance) + amount;
@@ -478,6 +483,11 @@ function handleTransferMoney(event) {
     return;
   }
 
+  if (amount > 50_000){
+    message.textContent = "Can't transfer more than ৳50,000 at a time.";
+    return;
+  }
+
   // Atomic-looking frontend simulation: update both account balances.
   state.user.balance = Number(state.user.balance) - amount;
 
@@ -563,6 +573,11 @@ function handlePayFees(event) {
 
   if (amount > Number(state.user.balance)) {
     message.textContent = "Insufficient balance.";
+    return;
+  }
+
+  if (amount > 25_000){
+    message.textContent = "Can't pay more than ৳25,000 at a time.";
     return;
   }
 
@@ -668,6 +683,11 @@ function handleMerchantPay(event) {
     return;
   }
 
+  if (amount > 25_000){
+    message.textContent = "Can't pay more than ৳25,000 at a time.";
+    return;
+  }
+
   // Atomic-looking frontend simulation: update both account balances.
   state.user.balance = Number(state.user.balance) - amount;
   recipient.balance = Number(recipient.balance) + amount;
@@ -736,8 +756,20 @@ function handleCashIn(event) {
     return;
   }
 
+  if (amount > 25_000){
+    message.textContent = "Can't cash in more than ৳25,000 at a time.";
+    return;
+  }
+
   // Cash In changes only the currently logged-in account.
   state.user.balance = Number(state.user.balance) + amount;
+
+  if (Number(state.user.balance) > 1_000_000){
+    message.textContent = "Maximum balance reached. Can't cash in.";
+    state.user.balance = Number(state.user.balance) - amount;
+    return;
+  }
+
   saveAccount(state.user);
 
   state.user = findAccount(state.user.phone);
@@ -801,6 +833,11 @@ function handleCashOut(event) {
 
   if (amount > Number(state.user.balance)) {
     message.textContent = "Insufficient balance.";
+    return;
+  }
+
+  if (amount > 25_000){
+    message.textContent = "Can't cash out more than ৳25,000 at a time.";
     return;
   }
 
