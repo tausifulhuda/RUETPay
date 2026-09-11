@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RUETPay — Digital Wallet</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <main class="app-shell">
+    <!-- AUTH -->
+    <section id="authPage" class="page auth-page">
+      <div class="brand">
+        <div class="brand-icon">৳</div>
+        <div>
+          <h1>RUETPay</h1>
+          <p>Digital wallet for RUET students</p>
+        </div>
+      </div>
+
+      <div class="auth-card glass-card">
+        <div class="auth-heading">
+          <span class="eyebrow">SECURE WALLET</span>
+          <h2 id="authTitle">Welcome back</h2>
+          <p id="authSubtitle">Login to manage your RUETPay account.</p>
+        </div>
+
+        <form id="authForm">
+          <div id="nameGroup" class="field hidden">
+            <label for="name">Full Name</label>
+            <input id="name" type="text" placeholder="e.g. Tausif Ul Huda" />
+          </div>
+
+          <div class="field">
+            <label for="phone">Mobile Number</label>
+            <input id="phone" type="tel" placeholder="01XXXXXXXXX" required />
+          </div>
+
+          <div class="field">
+            <label for="pin">PIN</label>
+            <input id="pin" type="password" inputmode="numeric" maxlength="4" placeholder="Enter 4 digit PIN" required />
+          </div>
+
+          <div id="confirmPinGroup" class="field hidden">
+            <label for="confirmPin">Confirm PIN</label>
+            <input id="confirmPin" type="password" inputmode="numeric" maxlength="6" placeholder="Re-enter your PIN" />
+          </div>
+
+          <button class="primary-btn full" type="submit">
+            <span id="authButtonText">Login</span>
+            <span>→</span>
+          </button>
+        </form>
+
+        <p id="authMessage" class="form-message"></p>
+
+        <div class="auth-switch">
+          <span id="switchText">Don't have an account?</span>
+          <button id="switchAuth" type="button">Register</button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- DASHBOARD -->
+    <section id="dashboardPage" class="page hidden">
+      <header class="topbar">
+        <div class="brand compact">
+          <div class="brand-icon">৳</div>
+          <div>
+            <h1>RUETPay</h1>
+            <p>Digital Wallet</p>
+          </div>
+        </div>
+        <button id="logoutBtn" class="logout-btn">Log Out</button>
+      </header>
+
+      <div class="welcome-row">
+        <div>
+          <span class="eyebrow">GOOD TO SEE YOU</span>
+          <h2>Hello, <span id="userName">User</span></h2>
+        </div>
+        <div class="status-pill"><span></span> Active</div>
+      </div>
+
+      <section class="balance-card">
+        <div class="balance-top">
+          <span>Available Balance</span>
+          <button id="toggleBalance" class="eye-btn">◉</button>
+        </div>
+        <div class="balance-amount"><span>৳</span><strong id="balanceValue">5,000.00</strong></div>
+        <div class="balance-footer">
+          <span>RUETPay Wallet</span>
+          <span id="walletNumber">01XXXXXXXXX</span>
+        </div>
+      </section>
+
+      <section class="services-section">
+        <div class="section-title">
+          <h3>Services</h3>
+          <span>Choose an action</span>
+        </div>
+
+        <div class="service-grid">
+          <button class="service-card active-service" data-service="send">
+            <span class="service-icon">↗</span>
+            <strong>Send Money</strong>
+            <small>Transfer to a user</small>
+          </button>
+
+          <button class="service-card active-service" data-service="cashout">
+            <span class="service-icon">↑</span>
+            <strong>Cash Out</strong>
+            <small>Withdraw your money</small>
+          </button>
+
+          <button class="service-card active-service" data-service="cashin">
+            <span class="service-icon">↓</span>
+            <strong>Cash In</strong>
+            <small>Receive cash</small>
+          </button>
+
+          <button class="service-card" data-service="recharge">
+            <span class="service-icon">⌁</span>
+            <strong>Mobile Recharge</strong>
+            <small>Recharge your number</small>
+          </button>
+
+          <button class="service-card" data-service="addmoney">
+            <span class="service-icon">+</span>
+            <strong>Add Money</strong>
+            <small>Add funds to wallet</small>
+          </button>
+
+          <button class="service-card active-service" data-service="transferMoney">
+            <span class="service-icon">⇄</span>
+            <strong>Transfer Money</strong>
+            <small>Move money between accounts</small>
+          </button>
+
+          <button class="service-card active-service" data-service="merchantPay">
+            <span class="service-icon">▣</span>
+            <strong>Merchant Pay</strong>
+            <small>Pay at a merchant</small>
+          </button>
+
+          <button class="service-card" data-service="bill">
+            <span class="service-icon">▤</span>
+            <strong>Bill Pay</strong>
+            <small>Pay your bills</small>
+          </button>
+
+          <button class="service-card active-service" data-service="payFees">
+            <span class="service-icon">◫</span>
+            <strong>Pay Fees</strong>
+            <small>Pay educational fees</small>
+          </button>
+
+          <button class="service-card" data-service="contact">
+            <span class="service-icon">☎</span>
+            <strong>Contact</strong>
+            <small>Get help & support</small>
+          </button>
+
+          <button class="service-card" data-service="charges">
+            <span class="service-icon">৳</span>
+            <strong>Charges</strong>
+            <small>View service charges</small>
+          </button>
+
+          <button class="service-card" data-service="">
+            <span class="service-icon">🖊</span>
+            <strong>Account</strong>
+            <small>Edit account details or delete your account</small>
+          </button>
+        </div>
+      </section>
+    </section>
+
+    <!-- SERVICE -->
+    <section id="servicePage" class="page hidden service-page">
+      <header class="topbar">
+        <button id="backBtn" class="back-btn">← <span>Dashboard</span></button>
+        <div class="brand compact">
+          <div class="brand-icon">৳</div>
+          <div>
+            <h1>RUETPay</h1>
+            <p>Digital Wallet</p>
+          </div>
+        </div>
+        <div class="topbar-spacer"></div>
+      </header>
+
+      <div id="serviceContent"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
