@@ -1,0 +1,5 @@
+server/node_modules/ 
+server/.env 
+server/ruetpay.db 
+server/ruetpay.db-shm 
+server/ruetpay.db-wal 

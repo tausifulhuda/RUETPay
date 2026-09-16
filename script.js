@@ -23,31 +23,7 @@ const state = {
 
 /* ===================== DATA LAYER ===================== */
 
-function getAccounts() {
-  const raw = localStorage.getItem("ruetpayAccounts");
-  return raw ? JSON.parse(raw) : [];
-}
-
-function saveAccounts(accounts) {
-  localStorage.setItem("ruetpayAccounts", JSON.stringify(accounts));
-}
-
-function findAccount(phone) {
-  return getAccounts().find(account => account.phone === phone) || null;
-}
-
-function saveAccount(account) {
-  const accounts = getAccounts();
-  const index = accounts.findIndex(item => item.phone === account.phone);
-
-  if (index === -1) {
-    accounts.push(account);
-  } else {
-    accounts[index] = account;
-  }
-
-  saveAccounts(accounts);
-}
+const API = "http://localhost:5000/api";
 
 function setCurrentUser(phone) {
   if (phone) {
@@ -57,9 +33,16 @@ function setCurrentUser(phone) {
   }
 }
 
-function getCurrentUser() {
-  const phone = localStorage.getItem("ruetpayCurrentUser");
-  return phone ? findAccount(phone) : null;
+function getCurrentUserPhone() {
+  return localStorage.getItem("ruetpayCurrentUser") || null;
+}
+
+async function apiFetch(path, options = {}) {
+  const res = await fetch(API + path, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  return res;
 }
 
 /* ===================== UI ===================== */
@@ -80,6 +63,10 @@ function money(value) {
 }
 
 function showPage(page) {
+  if (page === authPage) {
+    setAuthMode("login");
+  }
+
   [authPage, dashboardPage, servicePage].forEach(item => {
     item.classList.add("hidden");
   });
@@ -127,8 +114,8 @@ function showToast(message) {
 
 /* ===================== LOGIN / REGISTER ===================== */
 
-switchAuth.addEventListener("click", () => {
-  state.mode = state.mode === "login" ? "register" : "login";
+function setAuthMode(mode) {
+  state.mode = mode;
   const registering = state.mode === "register";
 
   document.getElementById("authTitle").textContent =
@@ -147,19 +134,26 @@ switchAuth.addEventListener("click", () => {
 
   switchAuth.textContent = registering ? "Login" : "Register";
 
-  document.getElementById("nameGroup").classList.toggle(
-    "hidden", !registering
-  );
+  const nameGroup = document.getElementById("nameGroup");
+  const confirmPinGroup = document.getElementById("confirmPinGroup");
 
-  document.getElementById("confirmPinGroup").classList.toggle(
-    "hidden", !registering
-  );
+  if (registering) {
+    nameGroup.classList.remove("hidden");
+    confirmPinGroup.classList.remove("hidden");
+  } else {
+    nameGroup.classList.add("hidden");
+    confirmPinGroup.classList.add("hidden");
+  }
 
   authMessage.textContent = "";
   authForm.reset();
+}
+
+switchAuth.addEventListener("click", () => {
+  setAuthMode(state.mode === "login" ? "register" : "login");
 });
 
-authForm.addEventListener("submit", event => {
+authForm.addEventListener("submit", async event => {
   event.preventDefault();
 
   const phone = document.getElementById("phone").value.trim();
@@ -192,52 +186,49 @@ authForm.addEventListener("submit", event => {
       return;
     }
 
-    // A mobile number can belong to only one account.
-    if (findAccount(phone)) {
-      authMessage.textContent =
-        "An account with this mobile number already exists. Please login.";
-      return;
+    try {
+      const res = await apiFetch("/accounts", {
+        method: "POST",
+        body: JSON.stringify({ name, phone, pin })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        authMessage.textContent = data.error || "Registration failed.";
+        return;
+      }
+
+      state.user = data.account;
+      setCurrentUser(phone);
+      setAuthMode("login");
+      showToast("Account created with ৳10.00");
+      openDashboard();
+    } catch (err) {
+      authMessage.textContent = "Failed to connect to server.";
     }
-
-    // Every newly registered account receives Tk 10.
-    const newAccount = {
-      name: name,
-      phone: phone,
-      pin: pin,
-      balance: 10
-    };
-
-    saveAccount(newAccount);
-
-    state.user = newAccount;
-    setCurrentUser(phone);
-
-    showToast("Account created with ৳10.00");
-
-    setTimeout(openDashboard, 350);
     return;
   }
 
   /* ---------- LOGIN ---------- */
-  // IMPORTANT: do not create an account during login.
-  const account = findAccount(phone);
+  try {
+    const res = await apiFetch("/login", {
+      method: "POST",
+      body: JSON.stringify({ phone, pin })
+    });
+    const data = await res.json();
 
-  if (!account) {
-    authMessage.textContent =
-      "No account found. Please register before logging in.";
-    return;
+    if (!res.ok) {
+      authMessage.textContent = data.error || "Login failed.";
+      return;
+    }
+
+    state.user = data.account;
+    setCurrentUser(phone);
+    showToast("Login successful!");
+    openDashboard();
+  } catch (err) {
+    authMessage.textContent = "Failed to connect to server.";
   }
-
-  if (account.pin !== pin) {
-    authMessage.textContent = "Incorrect PIN. Please try again.";
-    return;
-  }
-
-  state.user = account;
-  setCurrentUser(account.phone);
-
-  showToast("Login successful!");
-  setTimeout(openDashboard, 350);
 });
 
 /* ===================== DASHBOARD ===================== */
@@ -250,6 +241,7 @@ document.getElementById("toggleBalance").addEventListener("click", () => {
 document.getElementById("logoutBtn").addEventListener("click", () => {
   state.user = null;
   setCurrentUser(null);
+  setAuthMode("login");
   showPage(authPage);
   showToast("Logged out successfully.");
 });
@@ -262,7 +254,7 @@ document.getElementById("backBtn").addEventListener("click", openDashboard);
 
 /* ===================== SERVICES ===================== */
 
-const activeServices = ["send", "cashin", "cashout", "merchantPay", "transferMoney", "payFees"];
+const activeServices = ["send", "cashin", "cashout", "merchantPay", "transferMoney", "payFees", "account"];
 
 function openService(key) {
   if (!state.user) {
@@ -296,6 +288,7 @@ function openService(key) {
   if (key === "merchantPay") renderMerchantPay();
   if (key === "transferMoney") renderTransferMoney();
   if (key === "payFees") renderPayFees();
+  if (key === "account") renderAccount();
 
   showPage(servicePage);
 }
@@ -350,7 +343,7 @@ function renderSendMoney() {
     .addEventListener("submit", handleSendMoney);
 }
 
-function handleSendMoney(event) {
+async function handleSendMoney(event) {
   event.preventDefault();
 
   const recipientPhone = document.getElementById("recipient").value.trim();
@@ -374,15 +367,6 @@ function handleSendMoney(event) {
     return;
   }
 
-  // Recipient must already be registered.
-  const recipient = findAccount(recipientPhone);
-
-  if (!recipient) {
-    message.textContent =
-      "Recipient account not found. Money can only be sent to a registered account.";
-    return;
-  }
-
   if (amount > Number(state.user.balance)) {
     message.textContent = "Insufficient balance.";
     return;
@@ -393,20 +377,29 @@ function handleSendMoney(event) {
     return;
   }
 
-  // Atomic-looking frontend simulation: update both account balances.
-  state.user.balance = Number(state.user.balance) - amount;
-  recipient.balance = Number(recipient.balance) + amount;
+  try {
+    const res = await apiFetch("/send", {
+      method: "POST",
+      body: JSON.stringify({
+        senderPhone: state.user.phone,
+        recipientPhone,
+        amount
+      })
+    });
+    const data = await res.json();
 
-  saveAccount(state.user);
-  saveAccount(recipient);
+    if (!res.ok) {
+      message.textContent = data.error || "Send money failed.";
+      return;
+    }
 
-  // Refresh sender from storage so the current account is synchronized.
-  state.user = findAccount(state.user.phone);
-
-  updateBalance();
-
-  showToast(`৳${money(amount)} sent successfully to ${recipient.phone}`);
-  setTimeout(openDashboard, 650);
+    state.user.balance = data.balance;
+    updateBalance();
+    showToast(`৳${money(amount)} sent successfully to ${recipientPhone}`);
+    setTimeout(openDashboard, 650);
+  } catch (err) {
+    message.textContent = "Failed to connect to server.";
+  }
 }
 
 /* ===================== TRANSFER MONEY ====================*/
@@ -459,7 +452,7 @@ function renderTransferMoney() {
     .addEventListener("submit", handleTransferMoney);
 }
 
-function handleTransferMoney(event) {
+async function handleTransferMoney(event) {
   event.preventDefault();
 
   const acNumber = document.getElementById("recipient").value.trim();
@@ -488,18 +481,30 @@ function handleTransferMoney(event) {
     return;
   }
 
-  // Atomic-looking frontend simulation: update both account balances.
-  state.user.balance = Number(state.user.balance) - amount;
+  try {
+    const res = await apiFetch("/transfer", {
+      method: "POST",
+      body: JSON.stringify({
+        phone: state.user.phone,
+        accountNumber: acNumber,
+        amount,
+        type: "TRANSFER"
+      })
+    });
+    const data = await res.json();
 
-  saveAccount(state.user);
+    if (!res.ok) {
+      message.textContent = data.error || "Transfer failed.";
+      return;
+    }
 
-  // Refresh sender from storage so the current account is synchronized.
-  state.user = findAccount(state.user.phone);
-
-  updateBalance();
-
-  showToast(`৳${money(amount)} transferred successfully to ${acNumber}`);
-  setTimeout(openDashboard, 650);
+    state.user.balance = data.balance;
+    updateBalance();
+    showToast(`৳${money(amount)} transferred successfully to ${acNumber}`);
+    setTimeout(openDashboard, 650);
+  } catch (err) {
+    message.textContent = "Failed to connect to server.";
+  }
 }
 
 /* ===================== PAY FEES ====================*/
@@ -552,7 +557,7 @@ function renderPayFees() {
     .addEventListener("submit", handlePayFees);
 }
 
-function handlePayFees(event) {
+async function handlePayFees(event) {
   event.preventDefault();
 
   const acNumber = document.getElementById("recipient").value.trim();
@@ -581,18 +586,30 @@ function handlePayFees(event) {
     return;
   }
 
-  // Atomic-looking frontend simulation: update both account balances.
-  state.user.balance = Number(state.user.balance) - amount;
+  try {
+    const res = await apiFetch("/transfer", {
+      method: "POST",
+      body: JSON.stringify({
+        phone: state.user.phone,
+        accountNumber: acNumber,
+        amount,
+        type: "PAY_FEES"
+      })
+    });
+    const data = await res.json();
 
-  saveAccount(state.user);
+    if (!res.ok) {
+      message.textContent = data.error || "Payment failed.";
+      return;
+    }
 
-  // Refresh sender from storage so the current account is synchronized.
-  state.user = findAccount(state.user.phone);
-
-  updateBalance();
-
-  showToast(`৳${money(amount)} paid successfully to ${acNumber}`);
-  setTimeout(openDashboard, 650);
+    state.user.balance = data.balance;
+    updateBalance();
+    showToast(`৳${money(amount)} paid successfully to ${acNumber}`);
+    setTimeout(openDashboard, 650);
+  } catch (err) {
+    message.textContent = "Failed to connect to server.";
+  }
 }
 
 /* ===================== MERCHANT PAY ==================== */
@@ -645,7 +662,7 @@ function renderMerchantPay() {
     .addEventListener("submit", handleMerchantPay);
 }
 
-function handleMerchantPay(event) {
+async function handleMerchantPay(event) {
   event.preventDefault();
 
   const recipientPhone = document.getElementById("recipient").value.trim();
@@ -669,15 +686,6 @@ function handleMerchantPay(event) {
     return;
   }
 
-  // Recipient must already be registered.
-  const recipient = findAccount(recipientPhone);
-
-  if (!recipient) {
-    message.textContent =
-      "Merchant account not found. Money can only be sent to a registered account.";
-    return;
-  }
-
   if (amount > Number(state.user.balance)) {
     message.textContent = "Insufficient balance.";
     return;
@@ -688,20 +696,29 @@ function handleMerchantPay(event) {
     return;
   }
 
-  // Atomic-looking frontend simulation: update both account balances.
-  state.user.balance = Number(state.user.balance) - amount;
-  recipient.balance = Number(recipient.balance) + amount;
+  try {
+    const res = await apiFetch("/merchant-pay", {
+      method: "POST",
+      body: JSON.stringify({
+        senderPhone: state.user.phone,
+        merchantPhone: recipientPhone,
+        amount
+      })
+    });
+    const data = await res.json();
 
-  saveAccount(state.user);
-  saveAccount(recipient);
+    if (!res.ok) {
+      message.textContent = data.error || "Merchant pay failed.";
+      return;
+    }
 
-  // Refresh sender from storage so the current account is synchronized.
-  state.user = findAccount(state.user.phone);
-
-  updateBalance();
-
-  showToast(`৳${money(amount)} paid successfully to ${recipient.phone}`);
-  setTimeout(openDashboard, 650);
+    state.user.balance = data.balance;
+    updateBalance();
+    showToast(`৳${money(amount)} paid successfully to ${recipientPhone}`);
+    setTimeout(openDashboard, 650);
+  } catch (err) {
+    message.textContent = "Failed to connect to server.";
+  }
 }
 
 /* ===================== CASH IN ===================== */
@@ -743,7 +760,7 @@ function renderCashIn() {
     .addEventListener("submit", handleCashIn);
 }
 
-function handleCashIn(event) {
+async function handleCashIn(event) {
   event.preventDefault();
 
   const amount = Number(document.getElementById("cashInAmount").value);
@@ -761,22 +778,30 @@ function handleCashIn(event) {
     return;
   }
 
-  // Cash In changes only the currently logged-in account.
-  state.user.balance = Number(state.user.balance) + amount;
-
-  if (Number(state.user.balance) > 1_000_000){
+  if (Number(state.user.balance) + amount > 1_000_000){
     message.textContent = "Maximum balance reached. Can't cash in.";
-    state.user.balance = Number(state.user.balance) - amount;
     return;
   }
 
-  saveAccount(state.user);
+  try {
+    const res = await apiFetch("/cashin", {
+      method: "POST",
+      body: JSON.stringify({ phone: state.user.phone, amount })
+    });
+    const data = await res.json();
 
-  state.user = findAccount(state.user.phone);
-  updateBalance();
+    if (!res.ok) {
+      message.textContent = data.error || "Cash In failed.";
+      return;
+    }
 
-  showToast(`৳${money(amount)} added to your wallet.`);
-  setTimeout(openDashboard, 650);
+    state.user.balance = data.balance;
+    updateBalance();
+    showToast(`৳${money(amount)} added to your wallet.`);
+    setTimeout(openDashboard, 650);
+  } catch (err) {
+    message.textContent = "Failed to connect to server.";
+  }
 }
 
 /* ===================== CASH OUT ===================== */
@@ -818,7 +843,7 @@ function renderCashOut() {
     .addEventListener("submit", handleCashOut);
 }
 
-function handleCashOut(event) {
+async function handleCashOut(event) {
   event.preventDefault();
 
   const amount = Number(document.getElementById("cashOutAmount").value);
@@ -841,25 +866,250 @@ function handleCashOut(event) {
     return;
   }
 
-  state.user.balance = Number(state.user.balance) - amount;
-  saveAccount(state.user);
+  try {
+    const res = await apiFetch("/cashout", {
+      method: "POST",
+      body: JSON.stringify({ phone: state.user.phone, amount })
+    });
+    const data = await res.json();
 
-  state.user = findAccount(state.user.phone);
-  updateBalance();
+    if (!res.ok) {
+      message.textContent = data.error || "Cash Out failed.";
+      return;
+    }
 
-  showToast(`৳${money(amount)} cashed out successfully.`);
-  setTimeout(openDashboard, 650);
+    state.user.balance = data.balance;
+    updateBalance();
+    showToast(`৳${money(amount)} cashed out successfully.`);
+    setTimeout(openDashboard, 650);
+  } catch (err) {
+    message.textContent = "Failed to connect to server.";
+  }
+}
+
+/* ===================== ACCOUNT ===================== */
+
+function renderAccount() {
+  serviceContent.innerHTML = `
+    <div class="service-heading">
+      <div class="big-service-icon">🖊</div>
+      <span class="eyebrow">RUETPay SERVICE</span>
+      <h2>Account</h2>
+      <p>
+        View and manage your account details and security.
+      </p>
+    </div>
+
+    <div class="form-card glass-card">
+      <div class="mini-balance" style="margin-bottom: 8px;">
+        <span>Account Number</span>
+        <strong>${state.user.account_number || ""}</strong>
+      </div>
+      <div class="mini-balance" style="margin-bottom: 8px;">
+        <span>Full Name</span>
+        <strong id="displayName">${state.user.name}</strong>
+      </div>
+      <div class="mini-balance" style="margin-bottom: 8px;">
+        <span>Mobile Number</span>
+        <strong>${state.user.phone}</strong>
+      </div>
+      <div class="mini-balance" style="margin-bottom: 24px;">
+        <span>Available Balance</span>
+        <strong>৳ ${money(state.user.balance)}</strong>
+      </div>
+
+      <form id="editNameForm">
+        <span class="eyebrow">EDIT NAME</span>
+        <div class="field" style="margin-top: 10px;">
+          <label for="accountName">Full Name</label>
+          <input id="accountName" type="text" value="${state.user.name}" placeholder="Enter full name" required>
+        </div>
+
+        <div class="field">
+          <label for="editNamePin">Current PIN</label>
+          <input id="editNamePin" type="password" inputmode="numeric" maxlength="4" placeholder="Enter 4-digit PIN" required>
+        </div>
+
+        <button class="primary-btn full" type="submit">
+          Save Name <span>→</span>
+        </button>
+        <p id="editNameMessage" class="form-message"></p>
+      </form>
+
+      <form id="changePinForm" style="margin-top: 20px;">
+        <span class="eyebrow">SECURITY</span>
+        <div class="field" style="margin-top: 10px;">
+          <label for="currentPin">Current PIN</label>
+          <input id="currentPin" type="password" inputmode="numeric" maxlength="4" placeholder="Enter current 4-digit PIN" required>
+        </div>
+
+        <div class="field">
+          <label for="newPin">New PIN</label>
+          <input id="newPin" type="password" inputmode="numeric" maxlength="4" placeholder="Enter new 4-digit PIN" required>
+        </div>
+
+        <div class="field">
+          <label for="confirmNewPin">Confirm New PIN</label>
+          <input id="confirmNewPin" type="password" inputmode="numeric" maxlength="4" placeholder="Re-enter new 4-digit PIN" required>
+        </div>
+
+        <button class="primary-btn full" type="submit">
+          Change PIN <span>→</span>
+        </button>
+        <p id="changePinMessage" class="form-message"></p>
+      </form>
+
+      <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid rgba(0,0,0,0.08);">
+        <span class="eyebrow" style="color: #d84b56;">DANGER ZONE</span>
+        <p style="font-size: 12px; color: var(--muted); margin: 6px 0 14px;">
+          Once deleted, your account and all associated data cannot be recovered.
+        </p>
+        <button id="deleteAccountBtn" class="primary-btn full" type="button" style="background: linear-gradient(135deg, #d84b56, #b92b36); box-shadow: 0 10px 22px rgba(216,75,86,.25);">
+          Delete Account <span>✕</span>
+        </button>
+        <p id="deleteAccountMessage" class="form-message"></p>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("editNameForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const name = document.getElementById("accountName").value.trim();
+    const currentPin = document.getElementById("editNamePin").value.trim();
+    const message = document.getElementById("editNameMessage");
+    message.textContent = "";
+
+    if (!name) {
+      message.textContent = "Please enter your full name.";
+      return;
+    }
+
+    if (!/^\d{4}$/.test(currentPin)) {
+      message.textContent = "PIN must contain 4 digits.";
+      return;
+    }
+
+    try {
+      const res = await apiFetch(`/accounts/${state.user.phone}`, {
+        method: "PUT",
+        body: JSON.stringify({ name, currentPin })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        message.textContent = data.error || "Failed to update name.";
+        return;
+      }
+
+      state.user = data.account;
+      document.getElementById("displayName").textContent = state.user.name;
+      document.getElementById("userName").textContent = state.user.name.split(" ")[0];
+      document.getElementById("editNamePin").value = "";
+      showToast("Name updated successfully!");
+    } catch (err) {
+      message.textContent = "Failed to connect to server.";
+    }
+  });
+
+  document.getElementById("changePinForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const currentPin = document.getElementById("currentPin").value.trim();
+    const newPin = document.getElementById("newPin").value.trim();
+    const confirmNewPin = document.getElementById("confirmNewPin").value.trim();
+    const message = document.getElementById("changePinMessage");
+    message.textContent = "";
+
+    if (!/^\d{4}$/.test(currentPin)) {
+      message.textContent = "Current PIN must be 4 digits.";
+      return;
+    }
+
+    if (!/^\d{4}$/.test(newPin)) {
+      message.textContent = "New PIN must be exactly 4 digits.";
+      return;
+    }
+
+    if (newPin !== confirmNewPin) {
+      message.textContent = "New PIN and Confirm PIN do not match.";
+      return;
+    }
+
+    try {
+      const res = await apiFetch(`/accounts/${state.user.phone}/pin`, {
+        method: "PUT",
+        body: JSON.stringify({ currentPin, newPin })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        message.textContent = data.error || "Failed to update PIN.";
+        return;
+      }
+
+      state.user.pin = newPin;
+      document.getElementById("changePinForm").reset();
+      showToast(data.message || "PIN updated successfully.");
+    } catch (err) {
+      message.textContent = "Failed to connect to server.";
+    }
+  });
+
+  document.getElementById("deleteAccountBtn").addEventListener("click", handleDeleteAccount);
+}
+
+async function handleDeleteAccount() {
+  const confirmed = confirm("Are you sure you want to delete your account? This cannot be undone.");
+  if (!confirmed) return;
+
+  const pin = prompt("Enter your 4-digit PIN to confirm deletion:");
+  if (pin === null) return;
+  const trimmedPin = pin.trim();
+  if (!trimmedPin) {
+    alert("PIN is required to delete your account.");
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`/accounts/${state.user.phone}`, {
+      method: "DELETE",
+      body: JSON.stringify({ pin: trimmedPin })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error || "Failed to delete account.");
+      return;
+    }
+
+    state.user = null;
+    setCurrentUser(null);
+    setAuthMode("login");
+    showPage(authPage);
+    showToast("Account deleted successfully.");
+  } catch (err) {
+    alert("Failed to connect to server.");
+  }
 }
 
 /* ===================== SESSION RESTORE ===================== */
 
-function restoreSession() {
-  const account = getCurrentUser();
+async function restoreSession() {
+  const phone = getCurrentUserPhone();
+  if (!phone) return;
 
-  if (!account) return;
+  try {
+    const res = await apiFetch(`/accounts/${phone}`);
+    if (!res.ok) {
+      setCurrentUser(null);
+      return;
+    }
 
-  state.user = account;
-  openDashboard();
+    const account = await res.json();
+    state.user = account;
+    openDashboard();
+  } catch (err) {
+    setCurrentUser(null);
+  }
 }
 
 restoreSession();
