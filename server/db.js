@@ -21,6 +21,18 @@ db.exec(`
   );
 `);
 
+// Create transactions table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS transactions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone       TEXT    NOT NULL,
+    type        TEXT    NOT NULL,
+    amount      REAL    NOT NULL,
+    description TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 /* ── helpers ── */
 
 function generateAccountNumber(id) {
@@ -107,6 +119,21 @@ function transferBetween(senderPhone, recipientPhone, amount) {
   return transfer(); // throws automatically on failure, rolls back both updates
 }
 
+function recordTransaction({ phone, type, amount, description }) {
+  db.prepare(`
+    INSERT INTO transactions (phone, type, amount, description)
+    VALUES (?, ?, ?, ?)
+  `).run(phone, type, Number(amount), description || null);
+}
+
+function getTransactionsByPhone(phone) {
+  return db
+    .prepare(
+      "SELECT * FROM transactions WHERE phone = ? ORDER BY created_at DESC"
+    )
+    .all(phone);
+}
+
 module.exports = {
   findByPhone,
   createAccount,
@@ -115,4 +142,6 @@ module.exports = {
   deleteAccount,
   updateBalance,
   transferBetween,
+  recordTransaction,
+  getTransactionsByPhone,
 };
