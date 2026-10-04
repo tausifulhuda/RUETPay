@@ -23,7 +23,7 @@ const state = {
 
 /* ===================== DATA LAYER ===================== */
 
-const API = "http://localhost:5000/api";
+const API = "http://localhost:5001/api";
 
 function setCurrentUser(phone) {
   if (phone) {
@@ -254,7 +254,7 @@ document.getElementById("backBtn").addEventListener("click", openDashboard);
 
 /* ===================== SERVICES ===================== */
 
-const activeServices = ["send", "cashin", "cashout", "merchantPay", "transferMoney", "payFees", "account"];
+const activeServices = ["send", "cashin", "cashout", "merchantPay", "transferMoney", "payFees", "account", "transactions"];
 
 function openService(key) {
   if (!state.user) {
@@ -289,6 +289,7 @@ function openService(key) {
   if (key === "transferMoney") renderTransferMoney();
   if (key === "payFees") renderPayFees();
   if (key === "account") renderAccount();
+  if (key === "transactions") renderTransactionHistory();
 
   showPage(servicePage);
 }
@@ -1113,3 +1114,515 @@ async function restoreSession() {
 }
 
 restoreSession();
+
+/* ===================== TRANSACTION HISTORY ===================== */
+
+let allTransactions = [];
+
+async function renderTransactionHistory() {
+  serviceContent.innerHTML = `
+    <div class="service-heading">
+      <div class="big-service-icon">▤</div>
+      <span class="eyebrow">RUETPay SERVICE</span>
+      <h2>Transaction History</h2>
+      <p>
+        View, search and filter your wallet transactions.
+      </p>
+    </div>
+
+    <div class="form-card glass-card transaction-history-card">
+
+      <div class="transaction-filters">
+
+        <div class="field">
+          <label for="transactionSearch">Search</label>
+          <input
+            id="transactionSearch"
+            type="text"
+            placeholder="Search by name, phone or type..."
+          >
+        </div>
+
+        <div class="field">
+          <label for="transactionType">Transaction Type</label>
+          <select id="transactionType">
+            <option value="all">All Transactions</option>
+            <option value="send">Send Money</option>
+            <option value="cashin">Cash In</option>
+            <option value="cashout">Cash Out</option>
+            <option value="transfer">Transfer Money</option>
+            <option value="merchant">Merchant Payment</option>
+            <option value="fees">Fee Payment</option>
+          </select>
+        </div>
+
+        <div class="date-filter-row">
+
+          <div class="field">
+            <label for="transactionFrom">From</label>
+            <input id="transactionFrom" type="date">
+          </div>
+
+          <div class="field">
+            <label for="transactionTo">To</label>
+            <input id="transactionTo" type="date">
+          </div>
+
+        </div>
+
+        <div class="field">
+          <label for="transactionSort">Sort By</label>
+          <select id="transactionSort">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="highest">Highest Amount</option>
+            <option value="lowest">Lowest Amount</option>
+          </select>
+        </div>
+
+        <button
+          id="clearTransactionFilters"
+          class="secondary-btn full"
+          type="button"
+        >
+          Clear Filters
+        </button>
+
+      </div>
+
+      <div class="transaction-summary">
+        <div>
+          <span>Total Transactions</span>
+          <strong id="transactionCount">0</strong>
+        </div>
+
+        <div>
+          <span>Total Amount</span>
+          <strong id="transactionTotal">৳ 0.00</strong>
+        </div>
+      </div>
+
+      <div id="transactionList" class="transaction-list">
+        <p class="empty-transactions">
+          Loading transactions...
+        </p>
+      </div>
+
+    </div>
+  `;
+
+  setupTransactionFilters();
+  await loadTransactions();
+}
+
+async function loadTransactions() {
+  const transactionList = document.getElementById("transactionList");
+
+  try {
+    const res = await apiFetch(
+      `/transactions/${encodeURIComponent(state.user.phone)}`
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      transactionList.innerHTML = `
+        <p class="empty-transactions">
+          ${data.error || "Failed to load transactions."}
+        </p>
+      `;
+      return;
+    }
+
+    allTransactions = Array.isArray(data)
+      ? data
+      : data.transactions || [];
+
+    renderFilteredTransactions();
+
+  } catch (error) {
+    console.error(error);
+
+    transactionList.innerHTML = `
+      <p class="empty-transactions">
+        Failed to connect to server.
+      </p>
+    `;
+  }
+}
+function setupTransactionFilters() {
+
+  document
+    .getElementById("transactionSearch")
+    .addEventListener("input", renderFilteredTransactions);
+
+  document
+    .getElementById("transactionType")
+    .addEventListener("change", renderFilteredTransactions);
+
+  document
+    .getElementById("transactionFrom")
+    .addEventListener("change", renderFilteredTransactions);
+
+  document
+    .getElementById("transactionTo")
+    .addEventListener("change", renderFilteredTransactions);
+
+  document
+    .getElementById("transactionSort")
+    .addEventListener("change", renderFilteredTransactions);
+
+  document
+    .getElementById("clearTransactionFilters")
+    .addEventListener("click", clearTransactionFilters);
+}
+function renderFilteredTransactions() {
+
+  const search =
+    document
+      .getElementById("transactionSearch")
+      .value
+      .trim()
+      .toLowerCase();
+
+  const type =
+    document.getElementById("transactionType").value;
+
+  const from =
+    document.getElementById("transactionFrom").value;
+
+  const to =
+    document.getElementById("transactionTo").value;
+
+  const sort =
+    document.getElementById("transactionSort").value;
+
+  let filtered = [...allTransactions];
+
+  /* SEARCH */
+
+  if (search) {
+    filtered = filtered.filter(transaction => {
+
+      const searchableText = [
+        transaction.type,
+        transaction.description,
+        transaction.recipient,
+        transaction.sender,
+        transaction.phone,
+        transaction.accountNumber
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(search);
+    });
+  }
+
+  /* TYPE FILTER */
+
+  if (type !== "all") {
+
+    filtered = filtered.filter(transaction => {
+
+      const transactionType =
+        String(transaction.type || "").toLowerCase();
+
+      return transactionType.includes(type);
+    });
+  }
+
+  /* DATE FILTER */
+
+  if (from) {
+
+    filtered = filtered.filter(transaction => {
+
+      const transactionDate =
+        getTransactionDate(transaction);
+
+      return transactionDate >= from;
+    });
+  }
+
+  if (to) {
+
+    filtered = filtered.filter(transaction => {
+
+      const transactionDate =
+        getTransactionDate(transaction);
+
+      return transactionDate <= to;
+    });
+  }
+
+  /* SORT */
+
+  filtered.sort((a, b) => {
+
+    if (sort === "highest") {
+      return Number(b.amount || 0) -
+             Number(a.amount || 0);
+    }
+
+    if (sort === "lowest") {
+      return Number(a.amount || 0) -
+             Number(b.amount || 0);
+    }
+
+    const dateA =
+      new Date(
+        a.createdAt ||
+        a.date ||
+        a.created_at ||
+        0
+      );
+
+    const dateB =
+      new Date(
+        b.createdAt ||
+        b.date ||
+        b.created_at ||
+        0
+      );
+
+    if (sort === "oldest") {
+      return dateA - dateB;
+    }
+
+    return dateB - dateA;
+  });
+
+  displayTransactions(filtered);
+}
+function getTransactionDate(transaction) {
+
+  const value =
+    transaction.createdAt ||
+    transaction.date ||
+    transaction.created_at;
+
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().split("T")[0];
+}
+function displayTransactions(transactions) {
+
+  const list =
+    document.getElementById("transactionList");
+
+  const count =
+    document.getElementById("transactionCount");
+
+  const total =
+    document.getElementById("transactionTotal");
+
+  count.textContent = transactions.length;
+
+  const totalAmount =
+    transactions.reduce(
+      (sum, transaction) =>
+        sum + Number(transaction.amount || 0),
+      0
+    );
+
+  total.textContent = `৳ ${money(totalAmount)}`;
+
+  if (!transactions.length) {
+
+    list.innerHTML = `
+      <div class="empty-transactions">
+        <div class="empty-icon">⌕</div>
+        <h3>No transactions found</h3>
+        <p>
+          Try changing your search or filters.
+        </p>
+      </div>
+    `;
+
+    return;
+  }
+
+  list.innerHTML = transactions
+    .map(transaction => {
+
+      const type =
+        String(transaction.type || "")
+          .toLowerCase();
+
+      const amount =
+        Number(transaction.amount || 0);
+
+      const isIncoming =
+        type.includes("cashin") ||
+        type.includes("receive") ||
+        type.includes("salary");
+
+      const amountClass =
+        isIncoming
+          ? "transaction-incoming"
+          : "transaction-outgoing";
+
+      const amountPrefix =
+        isIncoming ? "+" : "-";
+
+      const icon =
+        getTransactionIcon(type);
+
+      const title =
+        getTransactionTitle(transaction);
+
+      const description =
+        transaction.description ||
+        transaction.recipient ||
+        transaction.sender ||
+        transaction.accountNumber ||
+        "RUETPay Transaction";
+
+      const date =
+        formatTransactionDate(
+          transaction.createdAt ||
+          transaction.date ||
+          transaction.created_at
+        );
+
+      return `
+        <div class="transaction-item">
+
+          <div class="transaction-icon">
+            ${icon}
+          </div>
+
+          <div class="transaction-info">
+
+            <strong>${escapeHTML(title)}</strong>
+
+            <span>
+              ${escapeHTML(String(description))}
+            </span>
+
+            <small>${escapeHTML(date)}</small>
+
+          </div>
+
+          <div class="transaction-amount ${amountClass}">
+            ${amountPrefix} ৳ ${money(amount)}
+          </div>
+
+        </div>
+      `;
+
+    })
+    .join("");
+}
+
+function getTransactionIcon(type) {
+
+  if (type.includes("send")) {
+    return "↗";
+  }
+
+  if (type.includes("cashin")) {
+    return "↓";
+  }
+
+  if (type.includes("cashout")) {
+    return "↑";
+  }
+
+  if (type.includes("merchant")) {
+    return "▣";
+  }
+
+  if (type.includes("fee")) {
+    return "◫";
+  }
+
+  if (type.includes("transfer")) {
+    return "⇄";
+  }
+
+  return "৳";
+}
+function getTransactionTitle(transaction) {
+
+  const type =
+    String(transaction.type || "")
+      .toLowerCase();
+
+  if (type.includes("send")) {
+    return "Send Money";
+  }
+
+  if (type.includes("cashin")) {
+    return "Cash In";
+  }
+
+  if (type.includes("cashout")) {
+    return "Cash Out";
+  }
+
+  if (type.includes("merchant")) {
+    return "Merchant Payment";
+  }
+
+  if (type.includes("fee")) {
+    return "Fee Payment";
+  }
+
+  if (type.includes("transfer")) {
+    return "Transfer Money";
+  }
+
+  return transaction.type || "Transaction";
+}
+function formatTransactionDate(value) {
+
+  if (!value) {
+    return "Date unavailable";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Date unavailable";
+  }
+
+  return date.toLocaleString("en-BD", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+function escapeHTML(value) {
+
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+function clearTransactionFilters() {
+
+  document.getElementById("transactionSearch").value = "";
+
+  document.getElementById("transactionType").value = "all";
+
+  document.getElementById("transactionFrom").value = "";
+
+  document.getElementById("transactionTo").value = "";
+
+  document.getElementById("transactionSort").value = "newest";
+
+  renderFilteredTransactions();
+}
